@@ -31,7 +31,13 @@ for i in range(1, 4):
             fft2dAll = toRhat(binPath)
             preProcessData.append(fft2dAll) # 54 * 1200 * 8 * 8
 
-X = preProcessData
+# Convert preProcessData to numpy array
+preProcessData = np.array(preProcessData)
+
+# Preprocess data for CNN
+num_samples = preProcessData.shape[0] * preProcessData.shape[1]  # 54 * 1200
+X = preProcessData.reshape((num_samples, 1, 8, 8))  # Reshape to [batch_size, channels, height, width]
+
 
 # Load validation data
 results_target1 = pd.read_excel('results_target1.xlsx')
@@ -46,7 +52,11 @@ hcTarget2 = results_target2['heartbeat_count'].values # Heartbeat count for targ
 y = list(zip(rcTarget1, hcTarget1, rcTarget2, hcTarget2)) # Make labels as [(rc1, hc1, rc2, hc2), ...]
 
 # Ensure y has the same number of samples as X
-assert len(y) == len(X), "The number of validation targets must match the number of samples."
+assert len(y) == preProcessData.shape[0], "The number of validation targets must match the number of samples."
+
+# Repeat y to match the number of samples in X
+y = np.repeat(y, preProcessData.shape[1], axis=0)
+
 
 # Convert to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
