@@ -1,14 +1,15 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from readDCA1000 import readDCA1000
 from compute_background_and_subtraction import compute_background_and_subtraction as CBAS
 
-#folderPath = r"mmWave_1\2_SymmetricalPosition\1_Radar_Raw_Data\position_ (7)" # 文件夹路径
-folderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/FMCW radar-based multi-person vital sign monitoring data/2_SymmetricalPosition/1_Radar_Raw_Data/position_ (7)" # 文件夹路径
-filePath = r'adc_3GHZ_position7_ (4).bin'
-binPath = folderPath + '/' + filePath
-
 def toRhat(binPath):
+  '''
+  输入：
+    binPath为雷达.bin文件
+
+  输入：
+    转换为原文对应的chirp*8*8 ROI ndarray
+  '''
   data = readDCA1000(binPath, 12, 200) # numChirps1200 * num_rx12 * numADCSamples200
   data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
 
@@ -17,7 +18,6 @@ def toRhat(binPath):
   meanSample = np.mean(data_minus, axis= 0);
   fft2d = np.fft.fft2(meanSample)
   fft2d_shifted = np.fft.fftshift(fft2d)
-  magnitude = np.abs(fft2d_shifted)
   peak_idx = np.argmax(np.abs(fft2d_shifted[1]))
   ROI = 4 # range bin
   start = max(0, peak_idx - ROI)
@@ -34,3 +34,13 @@ def toRhat(binPath):
   return fft2dAll
 
 # fft2dAll 为1200x8x8的R^数组
+
+# 示例 #################################################
+if __name__ == '__main__':
+  #folderPath = r"mmWave_1\2_SymmetricalPosition\1_Radar_Raw_Data\position_ (7)" # 文件夹路径
+  folderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/FMCW radar-based multi-person vital sign monitoring data/2_SymmetricalPosition/1_Radar_Raw_Data/position_ (7)" # 文件夹路径
+  filePath = r'adc_3GHZ_position7_ (4).bin'
+  binPath = folderPath + '/' + filePath
+  res = toRhat(binPath)
+  import matplotlib.pyplot as plt
+  plt.imshow(abs(res[800]), cmap='jet', aspect='auto', origin='lower')

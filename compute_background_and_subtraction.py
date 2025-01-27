@@ -5,17 +5,16 @@ def compute_background_and_subtraction(R: np.ndarray, beta: float = 0.9) -> tupl
   计算静态背景 B 和去除背景后的信号 R_minus。
   
   参数:
-    R (np.ndarray): 输入的雷达信号矩阵，形状为 (M, N, K)，其中：
+    R: 输入的雷达信号矩阵，形状为，其中：
                     M 为时间帧数，N 为 range bin 数，K 为方位角分辨率。
-    beta (float): 递归滤波器的衰减因子，默认为 0.9。
+    beta: 递归滤波器的衰减因子，默认为 0.9。
   
   返回:
-    B (np.ndarray): 静态背景矩阵，形状与 R 相同。
-    R_minus (np.ndarray): 去除背景后的信号矩阵，形状与 R 相同。
+    B: 静态背景矩阵，形状与 R 相同。
+    R_minus: 去除背景后的信号矩阵，形状与 R 相同。
   """
   M, N, K = R.shape
   B = np.zeros_like(R, dtype='complex')  # 假设 R 为复数信号
-  B[0] = R[0]  # 初始化第一帧背景
   
   # 递归计算背景 B[m]
   for m in range(1, M):
