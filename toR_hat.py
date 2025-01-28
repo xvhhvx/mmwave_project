@@ -11,7 +11,7 @@ def toRhat(binPath):
     转换为原文对应的chirp*8*8 ROI ndarray
 
   输出：
-    1200*8*8*2
+    54*1200*8*8*2
   '''
   data = readDCA1000(binPath, 12, 200) # numChirps1200 * num_rx12 * numADCSamples200
   data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
