@@ -1,5 +1,4 @@
 import numpy as np
-import os
 import matplotlib.pyplot as plt
 from readDCA1000 import readDCA1000
 from compute_background_and_subtraction import compute_background_and_subtraction as CBAS
@@ -15,6 +14,25 @@ oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/FMCW radar-based multi-pe
 preProcessData = []
 
 # Load and preprocess data
+for i in range(1, 4):
+    if i == 1:
+        band = '2GHZ'
+    elif i == 2:
+        band = '2_5GHZ'
+    elif i == 3:
+        band = '3GHZ'
+    for j in range(7, 10):
+        folderPath = oriFolderPath + r"position_ (" + str(j) + ")" #访问三个文件夹
+        for k in range(1, 7):
+            filePath = r'adc_'+ band +'_position'+ str(j) +'_ (' + str(k) +').bin' #访问各个 bin 文件
+            binPath = folderPath + '/' + filePath #使用 Windows 电脑可能需要修改为下面这行
+            ##binPath = folderPath + '\\' + filePath
+
+            fft2dAll = toRhat(binPath)
+            preProcessData.append(fft2dAll) # 54 * 1200 * 8 * 8
+
+'''
+# Load and preprocess data
 bin_files = [f for f in os.listdir(oriFolderPath) if f.endswith('.bin')]
 for file_name in bin_files:
     file_path = os.path.join(oriFolderPath, file_name)
@@ -25,15 +43,15 @@ for file_name in bin_files:
         preProcessData.append(processed_data)
     except Exception as e:
         print(f"Error processing {file_path}: {e}")
+'''
 
 # Convert preProcessData to numpy array
 preProcessData = np.array(preProcessData)
-print(f'{preProcessData.shape} has been loaded')
 
 # Preprocess data for CNN
-num_samples = preProcessData.shape[0] * preProcessData.shape[1]  # 54 * 1200
-X = preProcessData.reshape((num_samples, 1, 8, 8))  # Reshape to [batch_size, channels, height, width]
-
+#num_samples = preProcessData.shape[0] * preProcessData.shape[1]  # 54 * 1200
+#X = preProcessData.reshape((num_samples, 1, 8, 8))  # Reshape to [batch_size, channels, height, width]
+X = preProcessData
 
 # Load validation data
 results_target1 = pd.read_excel('results_target1.xlsx')
@@ -51,12 +69,13 @@ y = list(zip(rcTarget1, hcTarget1, rcTarget2, hcTarget2)) # Make labels as [(rc1
 assert len(y) == preProcessData.shape[0], "The number of validation targets must match the number of samples."
 
 # Repeat y to match the number of samples in X
-y = np.repeat(y, preProcessData.shape[1], axis=0)
+#y = np.repeat(y, preProcessData.shape[1], axis=0)
 
 
 # Convert to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y, dtype=torch.float32)
+print(X_tensor.shape, y_tensor.shape)
 
 # Create DataLoader
 dataset = TensorDataset(X_tensor, y_tensor)
