@@ -35,14 +35,24 @@ def toRhat(binPath):
     fft2dAll[chirp] = fft2dTmp
 
   # Separate real and imaginary parts and combine into a list of lists
-  combined_list = []
+  #combined_list = []
+  combined_array = np.zeros((num_chirps, 8, 8, 2), dtype='float32')
   for chirp in range(num_chirps):
       real_part = fft2dAll[chirp].real
       imaginary_part = fft2dAll[chirp].imag
-      combined = np.stack((real_part, imaginary_part), axis=-1)
-      combined_list.append(combined)
+      real_max = np.max(real_part)
+      real_min = np.min(real_part)
+      imag_max = np.max(imaginary_part)
+      imag_min = np.min(imaginary_part)
+    
+      print(f"Chirp {chirp}: real_part max = {real_max}, min = {real_min}")
+      print(f"Chirp {chirp}: imaginary_part max = {imag_max}, min = {imag_min}")
 
-  return combined_list
+      #combined = np.stack((real_part, imaginary_part), axis=-1)
+      #combined_list.append(combined)
+      combined_array[chirp] = np.stack((real_part, imaginary_part), axis=-1)
+
+  return combined_array
 
 # fft2dAll 为1200x8x8的R^数组
 

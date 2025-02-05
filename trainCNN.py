@@ -47,11 +47,20 @@ for file_name in bin_files:
 
 # Convert preProcessData to numpy array
 preProcessData = np.array(preProcessData)
-
+print(f"Type of preProcessData: {preProcessData.dtype}")
 # Preprocess data for CNN
 #num_samples = preProcessData.shape[0] * preProcessData.shape[1]  # 54 * 1200
 #X = preProcessData.reshape((num_samples, 1, 8, 8))  # Reshape to [batch_size, channels, height, width]
 X = preProcessData
+
+# Check for NaN and Inf values in numpy array
+if np.isnan(X).any():
+    print("NaN values found in X")
+if np.isinf(X).any():
+    print("Inf values found in X")
+
+# Clip the values to a reasonable range
+#X = np.clip(X, -1e10, 1e10)
 
 # Load validation data
 results_target1 = pd.read_excel('results_target1.xlsx')
@@ -76,6 +85,28 @@ y = np.array(y)
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y, dtype=torch.float32)
 print(X_tensor.shape, y_tensor.shape)
+
+# Check for NaN and Inf values in PyTorch tensors
+if torch.isnan(X_tensor).any():
+    print("NaN values found in X_tensor")
+if torch.isinf(X_tensor).any():
+    print("Inf values found in X_tensor")
+
+# Normalize the data of every group
+def normalize(data):
+    mean = data.mean(dim=(1, 2, 3, 4), keepdim=True)  # 按组计算均值
+    std = data.std(dim=(1, 2, 3, 4), keepdim=True) + 1e-8
+    return (data - mean) / std
+
+X_tensor = normalize(X_tensor)
+
+# Normalize the labels
+label_mean = y_tensor.mean(dim=0)
+label_std = y_tensor.std(dim=0) + 1e-8
+y_tensor = (y_tensor - label_mean) / label_std
+
+print(X_tensor.shape, y_tensor.shape)
+
 
 # Create DataLoader
 class GroupDataset(Dataset):
