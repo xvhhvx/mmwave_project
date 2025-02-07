@@ -47,10 +47,6 @@ for file_name in bin_files:
 
 # Convert preProcessData to numpy array
 preProcessData = np.array(preProcessData)
-print(f"Type of preProcessData: {preProcessData.dtype}")
-# Preprocess data for CNN
-#num_samples = preProcessData.shape[0] * preProcessData.shape[1]  # 54 * 1200
-#X = preProcessData.reshape((num_samples, 1, 8, 8))  # Reshape to [batch_size, channels, height, width]
 X = preProcessData
 
 # Check for NaN and Inf values in numpy array
@@ -58,9 +54,6 @@ if np.isnan(X).any():
     print("NaN values found in X")
 if np.isinf(X).any():
     print("Inf values found in X")
-
-# Clip the values to a reasonable range
-#X = np.clip(X, -1e10, 1e10)
 
 # Load validation data
 results_target1 = pd.read_excel('results_target1.xlsx')
@@ -77,9 +70,6 @@ y = list(zip(rcTarget1, hcTarget1, rcTarget2, hcTarget2)) # Make labels as [(rc1
 # Ensure y has the same number of samples as X
 assert len(y) == preProcessData.shape[0], "The number of validation targets must match the number of samples."
 y = np.array(y)
-# Repeat y to match the number of samples in X
-#y = np.repeat(y, preProcessData.shape[1], axis=0)
-
 
 # Convert to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
@@ -163,8 +153,8 @@ for epoch in range(epoch_num):
     print(f"Epoch {epoch+1}/"+str(epoch_num))
     print(f"Train Loss: {train_loss:.6f}")
     
-    # 每10个epoch保存一次模型
-    if (epoch+1) % 10 == 0:
+    # 每20个epoch保存一次模型
+    if (epoch+1) % 20 == 0:
         torch.save(model.state_dict(), f"regression_model_epoch{epoch+1}.pth")
     print("-"*40)
 

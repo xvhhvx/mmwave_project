@@ -40,17 +40,18 @@ def toRhat(binPath):
   for chirp in range(num_chirps):
       real_part = fft2dAll[chirp].real
       imaginary_part = fft2dAll[chirp].imag
-      real_max = np.max(real_part)
-      real_min = np.min(real_part)
-      imag_max = np.max(imaginary_part)
-      imag_min = np.min(imaginary_part)
-    
-      print(f"Chirp {chirp}: real_part max = {real_max}, min = {real_min}")
-      print(f"Chirp {chirp}: imaginary_part max = {imag_max}, min = {imag_min}")
+      
+      # 计算当前chirp的最大绝对值以进行归一化
+      max_val = max(np.max(np.abs(real_part)), np.max(np.abs(imaginary_part)))
+      if max_val > 0:
+        real_part = real_part / max_val
+        imaginary_part = imaginary_part / max_val
 
-      #combined = np.stack((real_part, imaginary_part), axis=-1)
-      #combined_list.append(combined)
-      combined_array[chirp] = np.stack((real_part, imaginary_part), axis=-1)
+      # 转换为float32并存入数组
+      combined_array[chirp] = np.stack((real_part.astype('float32'), 
+                                        imaginary_part.astype('float32')), 
+                                        axis=-1)
+      #combined_array[chirp] = np.stack((real_part, imaginary_part), axis=-1)
 
   return combined_array
 
