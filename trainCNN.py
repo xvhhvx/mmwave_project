@@ -1,18 +1,30 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from readDCA1000 import readDCA1000
-from compute_background_and_subtraction import compute_background_and_subtraction as CBAS
+import os
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from simpleCNN import ChirpRegressionModel
+from simpleCNN import ChirpRegressionModel, SimpleCNN
+from pathlib import Path
 from toR_hat import toRhat
 
+# ------------------- Setup -------------------
+# Path setup
 oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/FMCW radar-based multi-person vital sign monitoring data/2_SymmetricalPosition/1_Radar_Raw_Data/" # 文件夹路径
 preProcessData = []
+checkpoint_dir = Path("checkpoints")
+checkpoint_dir.mkdir(exist_ok=True)
 
+# Training Setup
+device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
+model = ChirpRegressionModel().to(device)
+criterion = nn.MSELoss()  # 回归任务使用MSE损失
+optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
+epoch_num = 20 # 训练轮数
+
+# ------------------- Loading and Preprocessing Data -------------------
 # Load and preprocess data
 for i in range(1, 4):
     if i == 1:
@@ -71,6 +83,8 @@ y = list(zip(rcTarget1, hcTarget1, rcTarget2, hcTarget2)) # Make labels as [(rc1
 assert len(y) == preProcessData.shape[0], "The number of validation targets must match the number of samples."
 y = np.array(y)
 
+
+# ------------------- Input Dataloader -------------------
 # Convert to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y, dtype=torch.float32)
@@ -97,7 +111,6 @@ y_tensor = (y_tensor - label_mean) / label_std
 
 print(X_tensor.shape, y_tensor.shape)
 
-
 # Create DataLoader
 class GroupDataset(Dataset):
     def __init__(self, data, labels):
@@ -114,16 +127,7 @@ class GroupDataset(Dataset):
 dataset = GroupDataset(X_tensor, y_tensor)
 train_loader = DataLoader(dataset, batch_size=8, shuffle=True)
 
-# Training Setup
-device = torch.device("cuda" if torch.cuda.is_available() else "mps")
-model = ChirpRegressionModel().to(device)
-criterion = nn.MSELoss()  # 回归任务使用MSE损失
-optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
-epoch_num = 20
-
-#optimizer = optim.Adam(model.parameters(), lr=0.001)
-
+# ------------------- Training Loop -------------------
 # Training loop
 def train_epoch(model, dataloader, device):
     model.train()
@@ -145,18 +149,49 @@ def train_epoch(model, dataloader, device):
     epoch_loss = running_loss / len(dataloader)
     return epoch_loss
 
-for epoch in range(epoch_num):
+# Save and load checkpoints
+def save_checkpoint(epoch, model, optimizer, scheduler, loss, filename):
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'loss': loss,
+    }
+    torch.save(checkpoint, checkpoint_dir / filename)
+
+def load_checkpoint(model, optimizer, scheduler, filename):
+    checkpoint = torch.load(checkpoint_dir / filename)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    return checkpoint['epoch'], checkpoint['loss']
+
+# Modify training loop
+start_epoch = 0
+best_loss = float('inf')
+
+# Check for existing checkpoint
+latest_checkpoint = "latest_checkpoint.pt"
+if os.path.exists(checkpoint_dir / latest_checkpoint):
+    start_epoch, best_loss = load_checkpoint(model, optimizer, scheduler, latest_checkpoint)
+    print(f"Resuming from epoch {start_epoch} with loss {best_loss}")
+
+# Train the model
+for epoch in range(start_epoch, epoch_num):
     train_loss = train_epoch(model, train_loader, device)
     scheduler.step(train_loss)
     
-    # 打印训练信息
-    print(f"Epoch {epoch+1}/"+str(epoch_num))
-    print(f"Train Loss: {train_loss:.6f}")
+    # Save checkpoint
+    save_checkpoint(epoch + 1, model, optimizer, scheduler, train_loss, latest_checkpoint)
     
-    # 每20个epoch保存一次模型
-    if (epoch+1) % 20 == 0:
-        torch.save(model.state_dict(), f"regression_model_epoch{epoch+1}.pth")
-    print("-"*40)
+    # Save best model
+    if train_loss < best_loss:
+        best_loss = train_loss
+        save_checkpoint(epoch + 1, model, optimizer, scheduler, train_loss, "best_model.pt")
+    
+    print(f"Epoch {epoch+1}/{epoch_num}")
+    print(f"Train Loss: {train_loss:.6f}")
 
 # Evaluate the model
 def evaluate(model, dataloader, device):

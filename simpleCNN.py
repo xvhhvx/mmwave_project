@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
-'''
+
 # Define a simple CNN model
 class SimpleCNN(nn.Module):
     def __init__(self):
@@ -16,7 +16,7 @@ class SimpleCNN(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
-'''
+
 
 class ChirpRegressionModel(nn.Module):
     def __init__(self):
