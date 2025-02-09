@@ -96,19 +96,6 @@ if torch.isnan(X_tensor).any():
 if torch.isinf(X_tensor).any():
     print("Inf values found in X_tensor")
 
-# Normalize the data of every group
-def normalize(data):
-    mean = data.mean(dim=(1, 2, 3, 4), keepdim=True)  # 按组计算均值
-    std = data.std(dim=(1, 2, 3, 4), keepdim=True) + 1e-8
-    return (data - mean) / std
-
-X_tensor = normalize(X_tensor)
-
-# Normalize the labels
-label_mean = y_tensor.mean(dim=0)
-label_std = y_tensor.std(dim=0) + 1e-8
-y_tensor = (y_tensor - label_mean) / label_std
-
 print(X_tensor.shape, y_tensor.shape)
 
 # Create DataLoader
