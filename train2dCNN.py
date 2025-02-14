@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 from twodCNN import twodCNNModel
 from pathlib import Path
 from toR_hat import toRhat
+from sklearn.model_selection import train_test_split
 
 # ------------------- Setup -------------------
 # Path setup
@@ -117,16 +118,43 @@ class GroupDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx]  # [1200, 2, 8, 8], [4]
 
-
 dataset = GroupDataset(X_tensor, y_tensor)
 train_loader = DataLoader(dataset, batch_size, shuffle=True)
 
+# Split the data into training and validation sets
+train_indices, val_indices = train_test_split(
+    range(len(dataset)), 
+    test_size=0.2, 
+    random_state=42
+)
+
+train_dataset = torch.utils.data.Subset(dataset, train_indices)
+val_dataset = torch.utils.data.Subset(dataset, val_indices)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
 # ------------------- Training Loop -------------------
+# Evaluation metrics
+def calculate_metrics(outputs, labels):
+    """Calculate separate metrics for respiratory and heart rates"""
+    rc1_mae = torch.mean(torch.abs(outputs[:, 0] - labels[:, 0]))
+    hc1_mae = torch.mean(torch.abs(outputs[:, 1] - labels[:, 1]))
+    rc2_mae = torch.mean(torch.abs(outputs[:, 2] - labels[:, 2]))
+    hc2_mae = torch.mean(torch.abs(outputs[:, 3] - labels[:, 3]))
+    return {
+        'rc1_mae': rc1_mae.item(),
+        'hc1_mae': hc1_mae.item(),
+        'rc2_mae': rc2_mae.item(),
+        'hc2_mae': hc2_mae.item()
+    }
+
 # Training loop
 def train_epoch(model, dataloader, device):
     model.train()
     running_loss = 0.0
-    
+    metrics_sum = {'rc1_mae': 0, 'hc1_mae': 0, 'rc2_mae': 0, 'hc2_mae': 0}
+
     for inputs, labels in dataloader:
         inputs = inputs.to(device)
         labels = labels.to(device)
@@ -139,9 +167,15 @@ def train_epoch(model, dataloader, device):
         optimizer.step()
         
         running_loss += loss.item()
+        batch_metrics = calculate_metrics(outputs, labels)
+        for key in metrics_sum:
+            metrics_sum[key] += batch_metrics[key]
     
-    epoch_loss = running_loss / len(dataloader)
-    return epoch_loss
+    num_batches = len(dataloader)
+    epoch_loss = running_loss / num_batches
+    epoch_metrics = {k: v / num_batches for k, v in metrics_sum.items()}
+
+    return epoch_loss, epoch_metrics
 
 # Save and load checkpoints
 def save_checkpoint(epoch, model, optimizer, scheduler, loss, filename):
@@ -161,6 +195,47 @@ def load_checkpoint(model, optimizer, scheduler, filename):
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     return checkpoint['epoch'], checkpoint['loss']
 
+# Evaluate the model
+def evaluate(model, dataloader, device):
+    model.eval()
+    total_loss = 0.0
+    metrics_sum = {'rc1_mae': 0, 'hc1_mae': 0, 'rc2_mae': 0, 'hc2_mae': 0}
+
+    with torch.no_grad():
+        for inputs, labels in dataloader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+
+            batch_metrics = calculate_metrics(outputs, labels)
+            for key in metrics_sum:
+                metrics_sum[key] += batch_metrics[key]
+    
+    num_batches = len(dataloader)
+    return total_loss / num_batches, {k: v / num_batches for k, v in metrics_sum.items()}
+
+class EarlyStopping:
+    def __init__(self, patience=7, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_loss = None
+        self.early_stop = False
+        
+    def __call__(self, val_loss):
+        if self.best_loss is None:
+            self.best_loss = val_loss
+        elif val_loss > self.best_loss - self.min_delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_loss = val_loss
+            self.counter = 0
+
+
 # Modify training loop
 start_epoch = 0
 best_loss = float('inf')
@@ -171,34 +246,38 @@ if os.path.exists(checkpoint_dir / latest_checkpoint):
     start_epoch, best_loss = load_checkpoint(model, optimizer, scheduler, latest_checkpoint)
     print(f"Resuming from epoch {start_epoch} with loss {best_loss}")
 
-# Train the model
+# Training loop
+best_val_loss = float('inf')
 for epoch in range(start_epoch, epoch_num):
-    train_loss = train_epoch(model, train_loader, device)
-    scheduler.step(train_loss)
+    # Training phase
+    train_loss, train_metrics = train_epoch(model, train_loader, device)
+    
+    # Validation phase
+    val_loss, val_metrics = evaluate(model, val_loader, device)
+    
+    # Learning rate scheduling
+    scheduler.step(val_loss)
     
     # Save checkpoint
-    save_checkpoint(epoch + 1, model, optimizer, scheduler, train_loss, latest_checkpoint)
+    save_checkpoint(epoch + 1, model, optimizer, scheduler, val_loss, latest_checkpoint)
     
+    # Early stopping
+    early_stopping = EarlyStopping(patience=10)
+  
+
     # Save best model
-    if train_loss < best_loss:
-        best_loss = train_loss
-        save_checkpoint(epoch + 1, model, optimizer, scheduler, train_loss, "best_model.pt")
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        save_checkpoint(epoch + 1, model, optimizer, scheduler, val_loss, "best_model.pt")
     
-    print(f"Epoch {epoch+1}/{epoch_num}")
+    # Print metrics
+    print(f"\nEpoch {epoch+1}/{epoch_num}")
     print(f"Train Loss: {train_loss:.6f}")
+    print("Train Metrics:")
+    for k, v in train_metrics.items():
+        print(f"  {k}: {v:.4f}")
+    print(f"Val Loss: {val_loss:.6f}")
+    print("Val Metrics:")
+    for k, v in val_metrics.items():
+        print(f"  {k}: {v:.4f}")
 
-# Evaluate the model
-def evaluate(model, dataloader, device):
-    model.eval()
-    total_loss = 0.0
-    with torch.no_grad():
-        for inputs, labels in dataloader:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            total_loss += loss.item()
-    return total_loss / len(dataloader)
-
-val_loss = evaluate(model, train_loader, device)
-print(f"Validation MSE: {val_loss:.6f}")
