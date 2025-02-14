@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from simpleCNN import ChirpRegressionModel, SimpleCNN
+from twodCNN import twodCNNModel
 from pathlib import Path
 from toR_hat import toRhat
 
@@ -18,11 +18,18 @@ checkpoint_dir.mkdir(exist_ok=True)
 
 # Training Setup
 device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
-model = ChirpRegressionModel().to(device)
+model = twodCNNModel().to(device)
 criterion = nn.MSELoss()  # 回归任务使用MSE损失
-optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
+optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5) # modified params from trainLSTM.py
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.5,
+    patience=5,
+    min_lr=1e-6
+)                                                                       # modified params from trainLSTM.py
 epoch_num = 20 # 训练轮数
+batch_size = 4
 
 # ------------------- Loading and Preprocessing Data -------------------
 # Load and preprocess data
@@ -101,18 +108,18 @@ print(X_tensor.shape, y_tensor.shape)
 # Create DataLoader
 class GroupDataset(Dataset):
     def __init__(self, data, labels):
-        self.data = data  # (54, 1200, 2, 8, 8)
-        self.labels = labels  # (54, 4)
+        self.data = data      # [54, 1200, 2, 8, 8]
+        self.labels = labels  # [54, 4]
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # 返回形状： (1200, 2, 8, 8), (4,)
-        return self.data[idx], self.labels[idx]
+        return self.data[idx], self.labels[idx]  # [1200, 2, 8, 8], [4]
+
 
 dataset = GroupDataset(X_tensor, y_tensor)
-train_loader = DataLoader(dataset, batch_size=8, shuffle=True)
+train_loader = DataLoader(dataset, batch_size, shuffle=True)
 
 # ------------------- Training Loop -------------------
 # Training loop
