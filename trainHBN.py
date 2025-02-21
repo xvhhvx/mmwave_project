@@ -41,11 +41,20 @@ y = getVali(oriFolderPath, bin_files)
 X = np.array(X)
 y = np.array(y)
 
+# Reshape X from [9, 10, 60000, 3] to [90, 60000, 3]
+X = X.reshape(-1, 60000, 3)
+
+# Reshape y from [9, 10, 2] to [90, 2]
+y = y.reshape(-1, 2)
+
+# Transpose X to put channels first: [90, 3, 60000]
+X = X.transpose(0, 2, 1)
+
+
 # ------------------- Input Dataloader -------------------
 # Convert to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y, dtype=torch.float32)
-print(X_tensor.shape, y_tensor.shape)
 
 # Check for NaN and Inf values in PyTorch tensors
 if torch.isnan(X_tensor).any():
