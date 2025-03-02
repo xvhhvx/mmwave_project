@@ -66,7 +66,7 @@ if __name__ == "__main__":
     
     # 加载测试数据
     # ... 加载您的测试数据 ...
-    
+    test_data = np.random.rand(1200, 8, 8, 2)
     # 预测
     predictions = predict(model, test_data, device, params)
     print("预测结果:", predictions)
