@@ -1,10 +1,12 @@
 import numpy as np
 import os
+import pandas as pd
 from readDCA1000 import readDCA1000
 
 def getData(oriFolderPath, split_count=1):
     """
-    Load and preprocess data
+    Load and transform bin data into numpy arrays
+    Note: No preprocess (eg. FFT or toR_hat) to the data
     
     Parameters:
     -----------
@@ -56,11 +58,56 @@ def mergeData(data):
     data = data.reshape(-1, chirps, rx, samples)
     return data
 
+def separateComplexData(data):
+    """
+    Separate complex data into real and imaginary parts
+    
+    Parameters:
+    -----------
+    data : np.ndarray
+        Complex data array
+    
+    Returns:
+    --------
+    np.ndarray with shape (..., 2) where last dimension contains real and imaginary parts
+    """
+    # Extract real and imaginary parts
+    real_part = np.real(data)
+    imag_part = np.imag(data)
+    
+    # Stack them along a new last dimension
+    result = np.stack((real_part, imag_part), axis=-1)
+    
+    return result
+
+def getVali(valiPath):
+    """
+    Load and preprocess validation data
+    
+    Parameters:
+    -----------
+    oriFolderPath : str
+        Path to folder containing bin files
+    
+    Returns:
+    --------
+    np.ndarray
+    """
+    labels_df = pd.read_excel(valiPath, usecols=['HeartRate'])
+    labels = labels_df['HeartRate'].to_numpy()
+    return labels
 
 
 if __name__ == "__main__":
     oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample"
+    valiPath = oriFolderPath + "/HR.xlsx"
     X = getData(oriFolderPath, 5)
     X = mergeData(X)
+    X_separated = separateComplexData(X)
     # Print the shape of each part
     print(X.shape)
+    print("After separating complex values:", X_separated.shape)
+
+    y = getVali(valiPath)
+    print(y.shape)
+    

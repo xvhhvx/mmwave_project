@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -22,48 +23,58 @@ class ChirpRegressionModel(nn.Module):
     def __init__(self):
         super().__init__()
         
-        # 每个chirp的特征提取器
-        self.chirp_encoder = nn.Sequential(
-            # 输入: (2, 8, 8)
-            nn.Conv2d(2, 16, 3, padding=1),
+        # 每个时间步的特征提取器
+        # 输入: (2, 8, 200)
+        self.feature_encoder = nn.Sequential(
+            nn.Conv2d(2, 16, kernel_size=(3, 5), padding=(1, 2)),
             nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.MaxPool2d(2),  # 输出: (16,4,4)
+            nn.MaxPool2d(kernel_size=(2, 4)),  # 输出: (16, 4, 50)
             
-            nn.Conv2d(16, 32, 3, padding=1),
+            nn.Conv2d(16, 32, kernel_size=(3, 5), padding=(1, 2)),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.MaxPool2d(2)   # 输出: (32,2,2)
+            nn.MaxPool2d(kernel_size=(2, 5))   # 输出: (32, 2, 10)
         )
         
-        # 时间序列聚合器
-        self.temporal_aggregator = nn.Sequential(
-            nn.Linear(32*2*2, 128),
+        # 时间维度的LSTM处理
+        self.temporal_lstm = nn.LSTM(
+            input_size=32*2*10,
+            hidden_size=128,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.3,
+            bidirectional=True
+        )
+        
+        # 维度聚合和分类/回归输出
+        self.classifier = nn.Sequential(
+            nn.Linear(128*2, 64),  # 双向LSTM输出拼接
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.LSTM(128, 64, batch_first=True, bidirectional=True)
-        )
-        
-        # 回归输出层
-        self.regressor = nn.Sequential(
-            nn.Linear(64*2, 32),  # 双向LSTM输出拼接
-            nn.ReLU(),
-            nn.Linear(32, 4)
+            nn.Linear(64, 1)       # 单个输出值
         )
 
     def forward(self, x):
-        # x形状: (batch_size, 1200, 2, 8, 8)
-        batch_size, timesteps = x.size(0), x.size(1)
+        # x形状: (batch_size, 1200, 8, 200, 2)
+        batch_size = x.size(0)
+        timesteps = x.size(1)
         
-        # 处理每个chirp
-        x = x.view(batch_size*timesteps, 2, 8, 8)
-        chirp_features = self.chirp_encoder(x)  # (batch*1200, 32, 2, 2)
-        chirp_features = chirp_features.view(batch_size, timesteps, -1)  # (batch, 1200, 32*2*2)
+        # 重塑并交换维度，使通道维度正确
+        x = x.view(batch_size*timesteps, 2, 8, 200)  # 将2作为通道维度
         
-        # 时序聚合
-        temporal_out, (h_n, c_n) = self.temporal_aggregator(chirp_features)
+        # 应用特征编码器
+        features = self.feature_encoder(x)  # (batch*1200, 32, 2, 10)
+        features = features.view(batch_size, timesteps, -1)  # (batch, 1200, 32*2*10)
         
-        # 取最终时间步输出
-        last_output = temporal_out[:, -1, :]
+        # 应用LSTM进行时序处理
+        lstm_out, (h_n, _) = self.temporal_lstm(features)
         
-        return self.regressor(last_output)
+        # 使用最后时间步的隐藏状态
+        # 对于双向LSTM，拼接最后一层的两个方向
+        last_hidden = torch.cat([h_n[-2], h_n[-1]], dim=1)  # (batch, 128*2)
+        
+        # 分类/回归输出
+        output = self.classifier(last_hidden).squeeze(-1)  # 移除最后的维度，得到(batch,)
+        
+        return output

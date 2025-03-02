@@ -4,15 +4,18 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
+import pickle
+from torch.utils.data import DataLoader
 from simpleCNN import ChirpRegressionModel, SimpleCNN
 from pathlib import Path
 from toR_hat import toRhat
-from readDCA1000 import readDCA1000
+from getData import getData, mergeData, separateComplexData, getVali
+from GroupDataset import GroupDataset
 
 # ------------------- Setup -------------------
 # Path setup
 oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample/" # 文件夹路径
+valiPath = oriFolderPath + "/HR.xlsx"
 preProcessData = []
 checkpoint_dir = Path("checkpoints")
 checkpoint_dir.mkdir(exist_ok=True)
@@ -21,7 +24,7 @@ checkpoint_dir.mkdir(exist_ok=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
 model = ChirpRegressionModel().to(device)
 criterion = nn.MSELoss()  # 回归任务使用MSE损失
-optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+optimizer = optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-5)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     optimizer,
     mode='min',
@@ -30,49 +33,17 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     min_lr=1e-6
 )  
 epoch_num = 20 # 训练轮数
-batch_size_set = 4
+batch_size_set = 4 # 可以调高一些至8/16
 
 # ------------------- Loading and Preprocessing Data -------------------
 # Load and preprocess data
 
-bin_files = [f for f in os.listdir(oriFolderPath) if f.endswith('.bin')]
-for file_name in bin_files:
-    file_path = os.path.join(oriFolderPath, file_name)
-    
-    try:
-        # Process the file using toRhat function
-        data = readDCA1000(file_path, 12, 200) # numChirps1200 * num_rx12 * numADCSamples200
-        data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
-        preProcessData.append(data)
-    except Exception as e:
-        print(f"Error processing {file_path}: {e}")
-
-
-# Convert preProcessData to numpy array
-preProcessData = np.array(preProcessData)
-X = preProcessData
-
-# Check for NaN and Inf values in numpy array
-if np.isnan(X).any():
-    print("NaN values found in X")
-if np.isinf(X).any():
-    print("Inf values found in X")
+X = getData(oriFolderPath, 5)
+X = mergeData(X)
+X = separateComplexData(X)
 
 # Load validation data
-results_target1 = pd.read_excel('results_target1.xlsx')
-results_target2 = pd.read_excel('results_target2.xlsx')
-
-rcTarget1 = results_target1['respiratory_count'].values # Respiratory count for target 1
-hcTarget1 = results_target1['heartbeat_count'].values # Heartbeat count for target 1
-rcTarget2 = results_target2['respiratory_count'].values # Respiratory count for target 2
-hcTarget2 = results_target2['heartbeat_count'].values # Heartbeat count for target 2
-
-# Combine validation targets
-y = list(zip(rcTarget1, hcTarget1, rcTarget2, hcTarget2)) # Make labels as [(rc1, hc1, rc2, hc2), ...]
-
-# Ensure y has the same number of samples as X
-assert len(y) == preProcessData.shape[0], "The number of validation targets must match the number of samples."
-y = np.array(y)
+y = getVali(valiPath)
 
 
 # ------------------- Input Dataloader -------------------
@@ -80,6 +51,25 @@ y = np.array(y)
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y, dtype=torch.float32)
 print(X_tensor.shape, y_tensor.shape)
+
+# 对输入进行归一化
+X_mean = X_tensor.mean(dim=0, keepdim=True)
+X_std = X_tensor.std(dim=0, keepdim=True)
+X_tensor = (X_tensor - X_mean) / (X_std + 1e-7)  # 添加小值避免除零
+# 对目标进行归一化
+y_mean = y_tensor.mean()
+y_std = y_tensor.std()
+y_tensor = (y_tensor - y_mean) / y_std
+
+# 保存归一化参数
+normalization_params = {
+    'X_mean': X_mean.cpu().numpy(),
+    'X_std': X_std.cpu().numpy(),
+    'y_mean': y_mean.item(),
+    'y_std': y_std.item()
+}
+with open('normalization_params.pkl', 'wb') as f:
+    pickle.dump(normalization_params, f)
 
 # Check for NaN and Inf values in PyTorch tensors
 if torch.isnan(X_tensor).any():
@@ -90,20 +80,8 @@ if torch.isinf(X_tensor).any():
 print(X_tensor.shape, y_tensor.shape)
 
 # Create DataLoader
-class GroupDataset(Dataset):
-    def __init__(self, data, labels):
-        self.data = data  # (54, 1200, 2, 8, 8)
-        self.labels = labels  # (54, 4)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        # 返回形状： (1200, 2, 8, 8), (4,)
-        return self.data[idx], self.labels[idx]
-
 dataset = GroupDataset(X_tensor, y_tensor)
-train_loader = DataLoader(dataset, batch_size=8, shuffle=True)
+train_loader = DataLoader(dataset, batch_size=batch_size_set, shuffle=True)
 
 # ------------------- Training Loop -------------------
 # Training loop
@@ -127,6 +105,19 @@ def train_epoch(model, dataloader, device):
     epoch_loss = running_loss / len(dataloader)
     return epoch_loss
 
+# Evaluate the model
+def evaluate(model, dataloader, device):
+    model.eval()
+    total_loss = 0.0
+    with torch.no_grad():
+        for inputs, labels in dataloader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            total_loss += loss.item()
+    return total_loss / len(dataloader)
+
 # Save and load checkpoints
 def save_checkpoint(epoch, model, optimizer, scheduler, loss, filename):
     checkpoint = {
@@ -145,6 +136,8 @@ def load_checkpoint(model, optimizer, scheduler, filename):
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     return checkpoint['epoch'], checkpoint['loss']
 
+
+# ------------------- Training -------------------
 # Modify training loop
 start_epoch = 0
 best_loss = float('inf')
@@ -172,17 +165,5 @@ for epoch in range(start_epoch, epoch_num):
     print(f"Train Loss: {train_loss:.6f}")
 
 # Evaluate the model
-def evaluate(model, dataloader, device):
-    model.eval()
-    total_loss = 0.0
-    with torch.no_grad():
-        for inputs, labels in dataloader:
-            inputs = inputs.to(device)
-            labels = labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            total_loss += loss.item()
-    return total_loss / len(dataloader)
-
 val_loss = evaluate(model, train_loader, device)
 print(f"Validation MSE: {val_loss:.6f}")
