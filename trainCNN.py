@@ -8,10 +8,11 @@ from torch.utils.data import DataLoader, Dataset
 from simpleCNN import ChirpRegressionModel, SimpleCNN
 from pathlib import Path
 from toR_hat import toRhat
+from readDCA1000 import readDCA1000
 
 # ------------------- Setup -------------------
 # Path setup
-oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/FMCW radar-based multi-person vital sign monitoring data/2_SymmetricalPosition/1_Radar_Raw_Data/" # 文件夹路径
+oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample/" # 文件夹路径
 preProcessData = []
 checkpoint_dir = Path("checkpoints")
 checkpoint_dir.mkdir(exist_ok=True)
@@ -20,42 +21,32 @@ checkpoint_dir.mkdir(exist_ok=True)
 device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
 model = ChirpRegressionModel().to(device)
 criterion = nn.MSELoss()  # 回归任务使用MSE损失
-optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3)
+optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer,
+    mode='min',
+    factor=0.5,
+    patience=5,
+    min_lr=1e-6
+)  
 epoch_num = 20 # 训练轮数
+batch_size_set = 4
 
 # ------------------- Loading and Preprocessing Data -------------------
 # Load and preprocess data
-for i in range(1, 4):
-    if i == 1:
-        band = '2GHZ'
-    elif i == 2:
-        band = '2_5GHZ'
-    elif i == 3:
-        band = '3GHZ'
-    for j in range(7, 10):
-        folderPath = oriFolderPath + r"position_ (" + str(j) + ")" #访问三个文件夹
-        for k in range(1, 7):
-            filePath = r'adc_'+ band +'_position'+ str(j) +'_ (' + str(k) +').bin' #访问各个 bin 文件
-            binPath = folderPath + '/' + filePath #使用 Windows 电脑可能需要修改为下面这行
-            ##binPath = folderPath + '\\' + filePath
 
-            fft2dAll = toRhat(binPath)
-            preProcessData.append(fft2dAll) # 54 * 1200 * 8 * 8 * 2
-
-'''
-# Load and preprocess data
 bin_files = [f for f in os.listdir(oriFolderPath) if f.endswith('.bin')]
 for file_name in bin_files:
     file_path = os.path.join(oriFolderPath, file_name)
     
     try:
         # Process the file using toRhat function
-        processed_data = toRhat(file_path)
-        preProcessData.append(processed_data)
+        data = readDCA1000(file_path, 12, 200) # numChirps1200 * num_rx12 * numADCSamples200
+        data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
+        preProcessData.append(data)
     except Exception as e:
         print(f"Error processing {file_path}: {e}")
-'''
+
 
 # Convert preProcessData to numpy array
 preProcessData = np.array(preProcessData)
