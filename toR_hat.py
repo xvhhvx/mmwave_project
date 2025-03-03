@@ -34,26 +34,7 @@ def toRhat(binPath):
     fft2dTmp = fft2dTmp[:, start:end]
     fft2dAll[chirp] = fft2dTmp
 
-  # Separate real and imaginary parts and combine into a list of lists
-  #combined_list = []
-  combined_array = np.zeros((num_chirps, 8, 8, 2), dtype='float32')
-  for chirp in range(num_chirps):
-      real_part = fft2dAll[chirp].real
-      imaginary_part = fft2dAll[chirp].imag
-      
-      # 计算当前chirp的最大绝对值以进行归一化
-      max_val = max(np.max(np.abs(real_part)), np.max(np.abs(imaginary_part)))
-      if max_val > 0:
-        real_part = real_part / max_val
-        imaginary_part = imaginary_part / max_val
-
-      # 转换为float32并存入数组
-      combined_array[chirp] = np.stack((real_part.astype('float32'), 
-                                        imaginary_part.astype('float32')), 
-                                        axis=-1)
-      #combined_array[chirp] = np.stack((real_part, imaginary_part), axis=-1)
-
-  return combined_array
+  return fft2dAll
 
 # fft2dAll 为1200x8x8的R^数组
 

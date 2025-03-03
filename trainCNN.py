@@ -24,7 +24,7 @@ checkpoint_dir.mkdir(exist_ok=True)
 # Training Setup
 device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
 model = ChirpRegressionModel().to(device)
-criterion = nn.MSELoss()  # 回归任务使用MSE损失
+criterion = nn.SmoothL1Loss(beta = 0.1)  # 回归任务使用L1损失
 optimizer = optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-5)
 scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     optimizer,
@@ -33,7 +33,7 @@ scheduler = optim.lr_scheduler.ReduceLROnPlateau(
     patience=5,
     min_lr=1e-6
 )  
-epoch_num = 20 # 训练轮数
+epoch_num = 10 # 训练轮数
 batch_size_set = 4 # 可以调高一些至8/16
 split_size_set = 0.8 # 训练集占比
 patience_set = 5 # 早停耐心值

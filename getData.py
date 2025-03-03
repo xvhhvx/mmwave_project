@@ -2,6 +2,7 @@ import numpy as np
 import os
 import pandas as pd
 from readDCA1000 import readDCA1000
+from toR_hat import toRhat
 
 def getData(oriFolderPath, split_count=1):
     """
@@ -20,6 +21,7 @@ def getData(oriFolderPath, split_count=1):
     np.ndarray of shape (file_num, minutes, numChirps per minute, num_rx, numADCSamples)
     """
     preProcessData = []
+    
     bin_files = [f for f in os.listdir(oriFolderPath) if f.endswith('.bin')]
     for file_name in bin_files:
         file_path = os.path.join(oriFolderPath, file_name)
@@ -28,15 +30,18 @@ def getData(oriFolderPath, split_count=1):
             # Process the file using toRhat function
             data = readDCA1000(file_path, 12, 200) # numChirps6000 * num_rx12 * numADCSamples200
             data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
-            
+            #data = toRhat(file_path)
             # Split the data into split_count parts along numChirps)
             splits = np.array_split(data, split_count, axis=0)
-            
+              
+                
             preProcessData.append(splits)
+            
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
     
     result = np.array(preProcessData)
+    print(result.shape)
     return result
 
 def mergeData(data):
