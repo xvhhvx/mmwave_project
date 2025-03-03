@@ -51,8 +51,8 @@ y = getVali(valiPath)
 
 # ------------------- Input Dataloader -------------------
 # Convert to PyTorch tensors
-X_tensor = torch.tensor(X, dtype=torch.float32)
-y_tensor = torch.tensor(y, dtype=torch.float32)
+X_tensor = torch.tensor(X, dtype=torch.float64)
+y_tensor = torch.tensor(y, dtype=torch.float64)
 print(X_tensor.shape, y_tensor.shape)
 
 # 对输入进行归一化

@@ -14,9 +14,9 @@ def toRhat(data):
   输出：
     54*1200*8*8*2
   '''
-  
-  data_minus = CBAS(data.transpose(0,2,1), beta= 1.5)[1].transpose(0,2,1) # 消除背景干扰
 
+  data_minus = CBAS(data.transpose(0,2,1), beta= 1.5)[1].transpose(0,2,1) # 消除背景干扰
+  
   meanSample = np.mean(data_minus, axis= 0);
   fft2d = np.fft.fft2(meanSample)
   fft2d_shifted = np.fft.fftshift(fft2d)
@@ -32,7 +32,6 @@ def toRhat(data):
     fft2dTmp = np.fft.fftshift(fft2dTmp)
     fft2dTmp = fft2dTmp[:, start:end]
     fft2dAll[chirp] = fft2dTmp
-
   return fft2dAll
 
 # fft2dAll 为1200x8x8的R^数组
