@@ -1,8 +1,9 @@
 import numpy as np
+import os
 from readDCA1000 import readDCA1000
 from compute_background_and_subtraction import compute_background_and_subtraction as CBAS
 
-def toRhat(binPath):
+def toRhat(data):
   '''
   输入：
     binPath为雷达.bin文件
@@ -13,9 +14,7 @@ def toRhat(binPath):
   输出：
     54*1200*8*8*2
   '''
-  data = readDCA1000(binPath, 12, 200) # numChirps1200 * num_rx12 * numADCSamples200
-  data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
-
+  
   data_minus = CBAS(data.transpose(0,2,1), beta= 1.5)[1].transpose(0,2,1) # 消除背景干扰
 
   meanSample = np.mean(data_minus, axis= 0);
@@ -41,9 +40,18 @@ def toRhat(binPath):
 # 示例 #################################################
 if __name__ == '__main__':
   #folderPath = r"mmWave_1\2_SymmetricalPosition\1_Radar_Raw_Data\position_ (7)" # 文件夹路径
-  folderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/FMCW radar-based multi-person vital sign monitoring data/2_SymmetricalPosition/1_Radar_Raw_Data/position_ (7)" # 文件夹路径
-  filePath = r'adc_3GHZ_position7_ (4).bin'
-  binPath = folderPath + '/' + filePath
-  res = toRhat(binPath)
+  folderPath = r"//Volumes/T7_Shield/mmwave_ip/Dataset/Sample" # 文件夹路径
+  
+  bin_files = [f for f in os.listdir(folderPath) if f.endswith('.bin')]
+  binPath = bin_files[0]
+  file_path = os.path.join(folderPath, binPath)
+  data = readDCA1000(file_path, 12, 200) # numChirps1200 * num_rx12 * numADCSamples200
+  data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
+  print(data.shape)
+  splits = np.array_split(data, 5, axis=0)
+  data = splits[0]
+  print(data.shape)
+  res = toRhat(data)
+  print(res.shape)
   #import matplotlib.pyplot as plt
   #plt.imshow(abs(res[800]), cmap='jet', aspect='auto', origin='lower')

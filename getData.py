@@ -30,12 +30,17 @@ def getData(oriFolderPath, split_count=1):
             # Process the file using toRhat function
             data = readDCA1000(file_path, 12, 200) # numChirps6000 * num_rx12 * numADCSamples200
             data = data[:,np.r_[0:4, 8:12], :] # pick TX1, TX3　only
-            #data = toRhat(file_path)
-            # Split the data into split_count parts along numChirps)
+            
+            # Split the data into split_count parts along numChirps
             splits = np.array_split(data, split_count, axis=0)
-              
-                
-            preProcessData.append(splits)
+            
+            # Using toRhat to process
+            processed_splits = []
+            for split in splits:
+                processed_split = toRhat(split)
+                processed_splits.append(processed_split)
+            
+            preProcessData.append(processed_splits)
             
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
