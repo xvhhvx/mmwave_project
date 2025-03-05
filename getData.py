@@ -2,7 +2,7 @@ import numpy as np
 import os
 import pandas as pd
 from readDCA1000 import readDCA1000
-from toR_hat import toRhat
+from deprecated.toR_hat import toRhat
 
 def getData(oriFolderPath, split_count=1):
     """

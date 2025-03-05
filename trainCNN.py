@@ -3,12 +3,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import pickle
+import numpy as np
 from torch.utils.data import DataLoader
 from simpleCNN import ChirpRegressionModel
 from pathlib import Path
 import matplotlib.pyplot as plt
 from torch.utils.data import random_split
-from toR_hat import toRhat
 from getData import getData, mergeData, separateComplexData, getVali
 from EarlyStopping import EarlyStopping
 from GroupDataset import GroupDataset
@@ -51,8 +51,8 @@ y = getVali(valiPath)
 
 # ------------------- Input Dataloader -------------------
 # Convert to PyTorch tensors
-X_tensor = torch.tensor(X, dtype=torch.float64)
-y_tensor = torch.tensor(y, dtype=torch.float64)
+X_tensor = torch.tensor(X, dtype=torch.float32)
+y_tensor = torch.tensor(y, dtype=torch.float32)
 print(X_tensor.shape, y_tensor.shape)
 
 # 对输入进行归一化

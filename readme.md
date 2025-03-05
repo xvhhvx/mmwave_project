@@ -1,3 +1,11 @@
+# 20250306
+- toR_hat.py直接放弃，收进./deprecated文件夹里，替代为raw2Rhat.py
+- raw2Rhat.py输入为3维时域data，输出为3维（numChirpsx8x8）complex64 R_hat，分解后对应float32。
+  raw2Rhat不再需要另外调用函数，所有函数写在文件内部
+  raw2Rhat最后带一个ifMain的示例函数，可以可视化结果
+- 还没有做toR_hat与其他函数的对接，getData等文件里相关部分需要修改
+
+
 # 20250302
 
 - 基于 0228 采集数据修改了此前 LSTM 网络架构，以适配新数据。新数据未经 toR_hat.py 中的各种处理，直接喂给网络进行训练
