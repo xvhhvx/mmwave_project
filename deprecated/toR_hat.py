@@ -1,7 +1,7 @@
 import numpy as np
 import os
 from readDCA1000 import readDCA1000
-from compute_background_and_subtraction import compute_background_and_subtraction as CBAS
+from deprecated.compute_background_and_subtraction import compute_background_and_subtraction as CBAS
 
 def toRhat(data):
   '''

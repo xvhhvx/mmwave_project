@@ -2,7 +2,6 @@ import numpy as np
 import os
 import pandas as pd
 from readDCA1000 import readDCA1000
-from deprecated.toR_hat import toRhat
 from raw2Rhat import raw2Rhat
 
 def getData(oriFolderPath, split_count=1, loadFromFile=False, saveToFile=True, processed_file_name="processed_data.npy"):
