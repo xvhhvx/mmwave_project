@@ -1,3 +1,9 @@
+# 20250307_1
+- 使用ai分析网络结构，记录为structure.md
+- 原trainCNN.py跑损失函数全nan，疑似归一化问题（未修改），使用ai改进写为新文件trainCNN_improved.py与新调用函数data_validation.py，原理未仔细分析
+- 建议先舍弃lstm，用全cnn拟合
+
+
 # 20250307
 - 适配新的 raw2Rhat.py 文件，对应修改 gatData 和 trainCNN
 - getData 新增保存处理完成的输入数据功能，可在输入参数中配置是否保存或读取数据
