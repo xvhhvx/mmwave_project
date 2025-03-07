@@ -284,7 +284,7 @@ def raw2Rhat(r, visualize=False, frame_to_visualize=0):
 # Example usage
 if __name__ == "__main__":
   from readDCA1000 import readDCA1000
-  folderPath = r"Sample" # 文件夹路径
+  folderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample" # 文件夹路径
   filePath = r'adc_data_4.bin'
   binPath = folderPath + '/' + filePath
   data = readDCA1000(binPath, 12, 200)
