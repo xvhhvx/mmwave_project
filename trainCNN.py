@@ -9,88 +9,9 @@ from simpleCNN import ChirpRegressionModel
 from pathlib import Path
 import matplotlib.pyplot as plt
 from torch.utils.data import random_split
-from getData import getData, mergeData, separateComplexData, getVali
+from getData import getData, getVali
 from EarlyStopping import EarlyStopping
 from GroupDataset import GroupDataset
-
-# ------------------- Setup -------------------
-# Path setup
-oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample/" # 文件夹路径
-valiPath = oriFolderPath + "/HR.xlsx"
-preProcessData = []
-checkpoint_dir = Path("checkpoints")
-checkpoint_dir.mkdir(exist_ok=True)
-
-# Training Setup
-device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
-model = ChirpRegressionModel().to(device)
-criterion = nn.SmoothL1Loss(beta = 0.1)  # 回归任务使用L1损失
-optimizer = optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-5)
-scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer,
-    mode='min',
-    factor=0.5,
-    patience=5,
-    min_lr=1e-6
-)  
-epoch_num = 10 # 训练轮数
-batch_size_set = 4 # 可以调高一些至8/16
-split_size_set = 0.8 # 训练集占比
-patience_set = 5 # 早停耐心值
-
-# ------------------- Loading and Preprocessing Data -------------------
-# Load and preprocess data
-
-X = getData(oriFolderPath, 5)
-X = mergeData(X)
-X = separateComplexData(X)
-
-# Load validation data
-y = getVali(valiPath)
-
-
-# ------------------- Input Dataloader -------------------
-# Convert to PyTorch tensors
-X_tensor = torch.tensor(X, dtype=torch.float32)
-y_tensor = torch.tensor(y, dtype=torch.float32)
-print(X_tensor.shape, y_tensor.shape)
-
-# 对输入进行归一化
-X_mean = X_tensor.mean(dim=0, keepdim=True)
-X_std = X_tensor.std(dim=0, keepdim=True)
-X_tensor = (X_tensor - X_mean) / (X_std + 1e-7)  # 添加小值避免除零
-# 对目标进行归一化
-y_mean = y_tensor.mean()
-y_std = y_tensor.std()
-y_tensor = (y_tensor - y_mean) / y_std
-
-# 保存归一化参数
-normalization_params = {
-    'X_mean': X_mean.cpu().numpy(),
-    'X_std': X_std.cpu().numpy(),
-    'y_mean': y_mean.item(),
-    'y_std': y_std.item()
-}
-with open('normalization_params.pkl', 'wb') as f:
-    pickle.dump(normalization_params, f)
-
-# Check for NaN and Inf values in PyTorch tensors
-if torch.isnan(X_tensor).any():
-    print("NaN values found in X_tensor")
-if torch.isinf(X_tensor).any():
-    print("Inf values found in X_tensor")
-
-print(X_tensor.shape, y_tensor.shape)
-
-# Create DataLoader
-dataset = GroupDataset(X_tensor, y_tensor)
-
-train_size = int(split_size_set * len(dataset))
-val_size = len(dataset) - train_size
-train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-
-train_loader = DataLoader(train_dataset, batch_size=batch_size_set, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size_set, shuffle=False)
 
 # ------------------- Training Loop -------------------
 # Training loop
@@ -228,36 +149,112 @@ def train_with_early_stopping(model, train_loader, val_loader, optimizer, schedu
     
     return model, train_losses, val_losses, best_epoch
 
-# ------------------- Training -------------------
-# 使用早停训练模型
-print("Starting training with early stopping...")
-model, train_losses, val_losses, best_epoch = train_with_early_stopping(
-    model=model,
-    train_loader=train_loader,
-    val_loader=val_loader,  
-    optimizer=optimizer,
-    scheduler=scheduler,
-    criterion=criterion,
-    device=device,
-    epochs=epoch_num,
-    patience=patience_set
-)
 
-# 打印最终评估结果
-final_train_loss = evaluate(model, train_loader, device)
-final_val_loss = evaluate(model, val_loader, device)
-print(f"Final Training MSE: {final_train_loss:.6f}")
-print(f"Final Validation MSE: {final_val_loss:.6f}")
-print(f"Best model was from epoch {best_epoch}")
+if __name__ == "__main__":
+    # ------------------- Setup -------------------
+    # Path setup
+    oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample/" # 文件夹路径
+    valiPath = oriFolderPath + "/HR.xlsx"
+    preProcessData = []
+    checkpoint_dir = Path("checkpoints")
+    checkpoint_dir.mkdir(exist_ok=True)
 
-# 可视化训练曲线
+    # Training Setup
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
+    model = ChirpRegressionModel().to(device)
+    criterion = nn.L1Loss()  # 回归任务使用L1损失
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode='min',
+        factor=0.5,
+        patience=5,
+        min_lr=1e-6
+    )  
+    epoch_num = 50 # 训练轮数
+    batch_size_set = 16 # 可以调高一些至8/16
+    split_size_set = 0.8 # 训练集占比
+    patience_set = 5 # 早停耐心值
 
-plt.figure(figsize=(10, 5))
-plt.plot(train_losses, label='Training Loss')
-plt.plot(val_losses, label='Validation Loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.title('Training and Validation Loss')
-plt.legend()
-plt.savefig('loss_curve.png')
-plt.show()
+    # ------------------- Loading and Preprocessing Data -------------------
+    # Load and preprocess data
+    X = getData(oriFolderPath, 5, loadFromFile=True, saveToFile=False) # 直接从文件中读取数据
+
+    # Load validation data
+    y = getVali(valiPath)
+
+    # ------------------- Input Dataloader -------------------
+    # Convert to PyTorch tensors
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    y_tensor = torch.tensor(y, dtype=torch.float32)
+    print(X_tensor.shape, y_tensor.shape)
+
+    # 对输入进行归一化
+    X_mean = X_tensor.mean(dim=0, keepdim=True)
+    X_std = X_tensor.std(dim=0, keepdim=True)
+    X_tensor = (X_tensor - X_mean) / (X_std + 1e-7)  # 添加小值避免除零
+    # 对目标进行归一化
+    y_mean = y_tensor.mean()
+    y_std = y_tensor.std()
+    y_tensor = (y_tensor - y_mean) / y_std
+
+    # 保存归一化参数
+    normalization_params = {
+        'X_mean': X_mean.cpu().numpy(),
+        'X_std': X_std.cpu().numpy(),
+        'y_mean': y_mean.item(),
+        'y_std': y_std.item()
+    }
+    with open('normalization_params.pkl', 'wb') as f:
+        pickle.dump(normalization_params, f)
+
+    # Check for NaN and Inf values in PyTorch tensors
+    if torch.isnan(X_tensor).any():
+        print("NaN values found in X_tensor")
+    if torch.isinf(X_tensor).any():
+        print("Inf values found in X_tensor")
+
+    print(X_tensor.shape, y_tensor.shape)
+
+    # Create DataLoader
+    dataset = GroupDataset(X_tensor, y_tensor)
+
+    train_size = int(split_size_set * len(dataset))
+    val_size = len(dataset) - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size_set, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size_set, shuffle=False)
+
+    # ------------------- Training -------------------
+    # 使用早停训练模型
+    print("Starting training with early stopping...")
+    model, train_losses, val_losses, best_epoch = train_with_early_stopping(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,  
+        optimizer=optimizer,
+        scheduler=scheduler,
+        criterion=criterion,
+        device=device,
+        epochs=epoch_num,
+        patience=patience_set
+    )
+
+    # 打印最终评估结果
+    final_train_loss = evaluate(model, train_loader, device)
+    final_val_loss = evaluate(model, val_loader, device)
+    print(f"Final Training MSE: {final_train_loss:.6f}")
+    print(f"Final Validation MSE: {final_val_loss:.6f}")
+    print(f"Best model was from epoch {best_epoch}")
+
+    # 可视化训练曲线
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label='Training Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    plt.savefig('loss_curve.png')
+    plt.show()
