@@ -7,8 +7,8 @@ import numpy as np
 from torch.utils.data import DataLoader
 from simpleCNN import ChirpRegressionModel
 from pathlib import Path
+from sklearn.model_selection import StratifiedShuffleSplit
 import matplotlib.pyplot as plt
-from torch.utils.data import random_split
 from getData import getData, getVali
 from EarlyStopping import EarlyStopping
 from GroupDataset import GroupDataset
@@ -24,6 +24,17 @@ from data_validation import (
 # ------------------- Training Loop -------------------
 # Training loop with validation checks
 def train_epoch(model, dataloader, device):
+    """
+    Trains the model for one epoch with data validation checks.
+    
+    Args:
+        model: The neural network model to train
+        dataloader: DataLoader containing the training data
+        device: Computing device (cuda, mps, or cpu)
+        
+    Returns:
+        epoch_loss: Average loss for the epoch or NaN if no valid batches were processed
+    """
     model.train()
     running_loss = 0.0
     valid_batches = 0
@@ -79,6 +90,17 @@ def train_epoch(model, dataloader, device):
 
 # Evaluate the model with validation checks
 def evaluate(model, dataloader, device):
+    """
+    Evaluates the model on the provided dataset with data validation checks.
+    
+    Args:
+        model: The neural network model to evaluate
+        dataloader: DataLoader containing the evaluation data
+        device: Computing device (cuda, mps, or cpu)
+        
+    Returns:
+        total_loss / valid_batches: Average loss on the evaluation dataset or NaN if no valid batches
+    """
     model.eval()
     total_loss = 0.0
     valid_batches = 0
@@ -121,6 +143,17 @@ def evaluate(model, dataloader, device):
 
 # Save and load checkpoints
 def save_checkpoint(epoch, model, optimizer, scheduler, loss, filename):
+    """
+    Saves model checkpoint to disk for future resumption of training.
+    
+    Args:
+        epoch: Current epoch number
+        model: The neural network model to save
+        optimizer: The optimizer state to save
+        scheduler: The learning rate scheduler state to save
+        loss: Current loss value
+        filename: Name of the checkpoint file
+    """
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -131,6 +164,18 @@ def save_checkpoint(epoch, model, optimizer, scheduler, loss, filename):
     torch.save(checkpoint, checkpoint_dir / filename)
 
 def load_checkpoint(model, optimizer, scheduler, filename):
+    """
+    Loads a previously saved model checkpoint to resume training.
+    
+    Args:
+        model: The neural network model to load state into
+        optimizer: The optimizer to load state into
+        scheduler: The learning rate scheduler to load state into
+        filename: Name of the checkpoint file to load
+        
+    Returns:
+        tuple: (epoch, loss) from the loaded checkpoint
+    """
     checkpoint = torch.load(checkpoint_dir / filename)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -140,24 +185,24 @@ def load_checkpoint(model, optimizer, scheduler, filename):
 def train_with_early_stopping(model, train_loader, val_loader, optimizer, scheduler, 
                               criterion, device, epochs, patience=5):
     """
-    使用早停训练模型，添加数据验证检查
+    Trains the model with early stopping mechanism and data validation.
+    
+    Implements a complete training pipeline with best model tracking, checkpoints,
+    early stopping, data validation, and learning rate scheduling.
     
     Args:
-        model: 模型
-        train_loader: 训练数据加载器
-        val_loader: 验证数据加载器
-        optimizer: 优化器
-        scheduler: 学习率调度器
-        criterion: 损失函数
-        device: 计算设备
-        epochs: 最大训练轮数
-        patience: 早停耐心值
+        model: Neural network model to train
+        train_loader: DataLoader for training data
+        val_loader: DataLoader for validation data
+        optimizer: Optimizer for updating model weights
+        scheduler: Learning rate scheduler
+        criterion: Loss function
+        device: Computing device (cuda, mps, or cpu)
+        epochs: Maximum number of training epochs
+        patience: Number of epochs to wait for improvement before early stopping
         
     Returns:
-        model: 训练好的模型
-        train_losses: 训练损失历史
-        val_losses: 验证损失历史
-        best_epoch: 最佳模型的轮数
+        tuple: (trained_model, train_losses, val_losses, best_epoch)
     """
     # 初始化早停
     early_stopping = EarlyStopping(patience=patience, checkpoint_dir=checkpoint_dir)
@@ -208,14 +253,14 @@ def train_with_early_stopping(model, train_loader, val_loader, optimizer, schedu
         
         # 学习率调度
         scheduler.step(val_loss)  # 使用验证损失来调整学习率
-        
+        current_lr = optimizer.param_groups[0]['lr']
         # 保存检查点
         save_checkpoint(epoch + 1, model, optimizer, scheduler, train_loss, latest_checkpoint)
         
         # 打印训练进度
         print(f"Epoch {epoch+1}/{epochs}")
         print(f"Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}")
-        print(f"Learning rate: {optimizer.param_groups[0]['lr']:.8f}")
+        print(f"Learning rate: {current_lr:.8f}")
         
         # 早停检查
         early_stopping(val_loss, model, optimizer, scheduler, epoch)
@@ -243,11 +288,60 @@ def train_with_early_stopping(model, train_loader, val_loader, optimizer, schedu
     
     return model, train_losses, val_losses, best_epoch
 
+# 根据心率范围创建分层拆分以确保训练和验证集中的分布相似
+def create_stratified_split(X_tensor, y_tensor, y_mean, y_std, split_ratio=0.8):
+    """
+    Creates stratified train/validation split based on heart rate ranges.
+    
+    Ensures similar distributions of heart rates in both training and validation sets
+    by using percentile-based binning for stratification. This helps prevent 
+    distribution shift between training and evaluation.
+    
+    Args:
+        X_tensor: Feature tensor data
+        y_tensor: Target tensor data (normalized heart rates)
+        y_mean: Mean value used for heart rate normalization
+        y_std: Standard deviation used for heart rate normalization
+        split_ratio: Fraction of data to use for training (default: 0.8)
+        
+    Returns:
+        tuple: (train_dataset, val_dataset) containing GroupDataset objects
+    """
+    # Convert normalized y values back to original scale for binning
+    original_y = y_tensor.numpy() * y_std + y_mean
+    
+    # Create data-driven heart rate bins using percentiles
+    bins = np.percentile(original_y, [0, 20, 40, 60, 80, 100])
+    # Ensure unique bin edges (required by np.digitize)
+    bins = np.unique(bins)
+    # Add small epsilon to the last bin edge to include maximum value
+    if len(bins) > 1:
+        bins[-1] += 0.001
+    
+    print(f"Data-driven bin edges: {bins}")
+
+    bin_labels = np.digitize(original_y, bins[:-1])
+    
+    # Create stratified split
+    splitter = StratifiedShuffleSplit(n_splits=1, test_size=1-split_ratio, random_state=42)
+    train_indices, val_indices = next(splitter.split(X_tensor, bin_labels))
+    
+    # Create train and validation datasets
+    train_dataset = GroupDataset(X_tensor[train_indices], y_tensor[train_indices])
+    val_dataset = GroupDataset(X_tensor[val_indices], y_tensor[val_indices])
+    
+    print(f"Training set size: {len(train_dataset)}, Validation set size: {len(val_dataset)}")
+    print(f"Heart rate bin ranges: {list(zip(bins[:-1], bins[1:]))}")
+    print(f"Training bin distribution: {np.bincount(bin_labels[train_indices])}")
+    print(f"Validation bin distribution: {np.bincount(bin_labels[val_indices])}")
+    
+    return train_dataset, val_dataset
 
 if __name__ == "__main__":
     # ------------------- Setup -------------------
     # Path setup
-    oriFolderPath = r"/Sample" # 文件夹路径
+    #oriFolderPath = r"/Sample" # 文件夹路径
+    oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample/" # 文件夹路径
     valiPath = oriFolderPath + "/HR.xlsx"
     preProcessData = []
     checkpoint_dir = Path("checkpoints")
@@ -256,8 +350,8 @@ if __name__ == "__main__":
     # Training Setup
     device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
     model = ChirpRegressionModel().to(device)
-    criterion = nn.L1Loss()  # 回归任务使用L1损失
-    optimizer = optim.AdamW(model.parameters(), lr=1e-5, weight_decay=1e-6)
+    criterion = nn.MSELoss()  # 回归任务使用MSE损失
+    optimizer = optim.AdamW(model.parameters(), lr=5e-5, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
@@ -265,10 +359,10 @@ if __name__ == "__main__":
         patience=5,
         min_lr=1e-6
     )  
-    epoch_num = 50 # 训练轮数
+    epoch_num = 100 # 训练轮数
     batch_size_set = 16 # 可以调高一些至8/16
     split_size_set = 0.8 # 训练集占比
-    patience_set = 5 # 早停耐心值
+    patience_set = 10 # 早停耐心值
 
     # ------------------- Loading and Preprocessing Data -------------------
     # Load and preprocess data
@@ -311,11 +405,13 @@ if __name__ == "__main__":
     print(X_tensor.shape, y_tensor.shape)
 
     # Create DataLoader
-    dataset = GroupDataset(X_tensor, y_tensor)
-
-    train_size = int(split_size_set * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    train_dataset, val_dataset = create_stratified_split(
+        X_tensor, 
+        y_tensor, 
+        y_mean=y_mean.item(),  # Ensure scalar value
+        y_std=y_std.item(),    # Ensure scalar value
+        split_ratio=split_size_set
+    )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size_set, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size_set, shuffle=False)
