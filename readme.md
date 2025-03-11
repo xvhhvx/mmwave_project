@@ -1,3 +1,7 @@
+# 20250312
+- 改进raw2Rhat文件（现为raw2Rhat_v2），进行二次搜索保证每一个chrip的数据有效并且最大值在中心，原文件放进/deprecated
+- 更新getData文件中对raw2Rhat的引用为raw2Rhat_v2
+
 # 20250311
 - 增加根据数据分布进行训练集、验证集切分，减少每一次运行数据集分布的随机性
 - 减小 cnn 通道数，减少 lstm 层数，缓解过拟合导致的早停问题，目前训练集、验证集 loss 下降趋势基本一致
@@ -6,7 +10,6 @@
 - 使用ai分析网络结构，记录为structure.md
 - 原trainCNN.py跑损失函数全nan，疑似归一化问题（未修改），使用ai改进写为新文件trainCNN_improved.py与新调用函数data_validation.py，原理未仔细分析
 - 建议先舍弃lstm，用全cnn拟合
-
 
 # 20250307
 - 适配新的 raw2Rhat.py 文件，对应修改 gatData 和 trainCNN

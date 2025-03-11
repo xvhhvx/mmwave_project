@@ -2,7 +2,7 @@ import numpy as np
 import os
 import pandas as pd
 from readDCA1000 import readDCA1000
-from raw2Rhat import raw2Rhat
+from raw2Rhat_v2 import raw2Rhat
 
 def getData(oriFolderPath, split_count=1, loadFromFile=False, saveToFile=True, processed_file_name="processed_data.npy"):
     """
