@@ -38,6 +38,7 @@ class ChirpRegressionModel(nn.Module):
         )
         
         # 时间维度的LSTM处理
+        # 输入: (batch, chirp_len, 16*2*2=64)
         self.temporal_lstm = nn.LSTM(
             input_size=16*2*2,
             hidden_size=32,
@@ -48,15 +49,15 @@ class ChirpRegressionModel(nn.Module):
         )
 
         # 维度聚合和分类/回归输出
+        # 输入: 32 (LSTM隐藏状态大小)
         self.classifier = nn.Sequential(
-            #nn.Linear(64*2, 32),  # 双向LSTM输出拼接
             nn.Linear(32, 16),
             nn.ReLU(),
-            #nn.Dropout(0.5),  # 不进行dropout
             nn.Linear(16, 1)       # 单个输出值
         )
 
-        # 添加一个空间平均池化层来减少时间步数
+        # 添加一个时间维度的平均池化层来减少时间步数
+        # 输入: (batch, 64, 1200) -> 输出: (batch, 64, 300)
         self.temporal_pooling = nn.AvgPool1d(kernel_size=4, stride=4)
 
     def forward(self, x):
@@ -68,8 +69,8 @@ class ChirpRegressionModel(nn.Module):
         x = x.view(batch_size*timesteps, 2, 8, 8)  # 将2作为通道维度
         
         # 应用特征编码器
-        features = self.feature_encoder(x)  # (batch*1200, 32, 2, 2)
-        features = features.view(batch_size, timesteps, -1)  # (batch, 1200, 32*2*2)
+        features = self.feature_encoder(x)  # (batch*1200, 16, 2, 2)
+        features = features.view(batch_size, timesteps, -1)  # (batch, 1200, 16*2*2)
         
         # 应用时间维度的池化，减少序列长度
         features_t = features.transpose(1, 2)  # (batch, 64, 1200)
@@ -77,12 +78,12 @@ class ChirpRegressionModel(nn.Module):
         features = features_t.transpose(1, 2)  # (batch, 300, 64)
 
         # 应用LSTM进行时序处理
+        # lstm_out: (batch, 300, 32)
+        # h_n: (1, batch, 32)
         lstm_out, (h_n, _) = self.temporal_lstm(features)
         
         # 使用最后时间步的隐藏状态
-        # 对于双向LSTM，拼接最后一层的两个方向
-        #last_hidden = torch.cat([h_n[-2], h_n[-1]], dim=1)  # (batch, 64*2)
-        last_hidden = h_n[-1]
+        last_hidden = h_n[-1]  # (batch, 32)
 
         # 分类/回归输出
         output = self.classifier(last_hidden).squeeze(-1)  # 移除最后的维度，得到(batch,)
