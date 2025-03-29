@@ -337,6 +337,69 @@ def create_stratified_split(X_tensor, y_tensor, y_mean, y_std, split_ratio=0.8):
     
     return train_dataset, val_dataset
 
+def filter_by_heart_rate(X_data, y_data, threshold=110, y_mean=0, y_std=1, is_normalized=True, device='cpu'):
+    """
+    Filters out data points with heart rates higher than the specified threshold.
+    
+    Parameters:
+    -----------
+    X_data : torch.Tensor or np.ndarray
+        Input features
+    y_data : torch.Tensor or np.ndarray
+        Heart rate labels
+    threshold : float
+        Maximum allowed heart rate value
+    y_mean : float
+        Mean value used for normalization of y_data (if normalized)
+    y_std : float
+        Standard deviation used for normalization of y_data (if normalized)
+    is_normalized : bool
+        Whether y_data is normalized
+    device : str
+        Device to which the data should be moved (e.g., 'cpu', 'cuda')
+            
+    Returns:
+    --------
+    tuple: (filtered_X, filtered_y)
+    """
+    # Convert to numpy if tensors
+    if isinstance(X_data, torch.Tensor):
+        X_numpy = X_data.cpu().numpy()
+    else:
+        X_numpy = X_data
+        
+    if isinstance(y_data, torch.Tensor):
+        y_numpy = y_data.cpu().numpy()
+    else:
+        y_numpy = y_data
+    
+    # Convert normalized values back to original scale if needed
+    if is_normalized:
+        original_y = y_numpy * y_std + y_mean
+    else:
+        original_y = y_numpy
+    
+    # Create mask for heart rates <= threshold
+    mask = original_y <= threshold
+    
+    # Apply mask to filter both X and y
+    filtered_X = X_numpy[mask]
+    filtered_y = y_numpy[mask]
+    
+    # Convert back to tensors if inputs were tensors
+    if isinstance(X_data, torch.Tensor):
+        filtered_X = torch.tensor(filtered_X, dtype=torch.float32)
+    
+    if isinstance(y_data, torch.Tensor):
+        filtered_y = torch.tensor(filtered_y, dtype=torch.float32)
+    
+    # Print stats about filtered data
+    print(f"Original data points: {len(y_numpy)}")
+    print(f"Filtered data points: {len(filtered_y)}")
+    print(f"Removed {len(y_numpy) - len(filtered_y)} data points with heart rate > {threshold}")
+    
+    return filtered_X, filtered_y
+
 if __name__ == "__main__":
     # ------------------- Setup -------------------
     # Path setup
@@ -366,10 +429,12 @@ if __name__ == "__main__":
 
     # ------------------- Loading and Preprocessing Data -------------------
     # Load and preprocess data
-    X = getData(oriFolderPath, 15, loadFromFile=True, saveToFile=False) # 直接从文件中读取数据，5 为切割为 1 分钟，15 为切割为 20 秒
+    X = getData(oriFolderPath, 5, loadFromFile=True, saveToFile=False) # 直接从文件中读取数据，5 为切割为 1 分钟，15 为切割为 20 秒
 
     # Load validation data
-    y = getVali(valiPath, 3) # 1（默认）为保持 1 分钟，3 为切割为 20 秒
+    y = getVali(valiPath) # 1（默认）为保持 1 分钟，3 为切割为 20 秒
+
+    X, y = filter_by_heart_rate(X, y, threshold=95, is_normalized=False) # 过滤掉心率大于 95 的数据
 
     # ------------------- Input Dataloader -------------------
     # Convert to PyTorch tensors
