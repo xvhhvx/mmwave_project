@@ -110,22 +110,58 @@ def separateComplexData(data):
     
     return result
 
-def getVali(valiPath):
+def getVali(valiPath, repeat_count=1):
     """
-    Load and preprocess validation data
+    Load and preprocess validation data with optional value repetition
     
     Parameters:
     -----------
-    oriFolderPath : str
-        Path to folder containing bin files
+    valiPath : str
+        Path to validation Excel file
+    repeat_count : int, optional
+        Number of times to repeat each validation value, default is 1 (no repetition)
     
     Returns:
     --------
     np.ndarray
+        Validation values, with each value repeated repeat_count times if specified
     """
     labels_df = pd.read_excel(valiPath, usecols=['HeartRate'])
     labels = labels_df['HeartRate'].to_numpy()
+    
+    if repeat_count > 1:
+        labels = duplicateValidationValues(labels, repeat_count)
+        
     return labels
+
+def duplicateValidationValues(validation_values, repeat_count):
+    """
+    Duplicate each value in the validation array the specified number of times.
+    
+    Parameters:
+    -----------
+    validation_values : np.ndarray
+        Original validation values array
+    repeat_count : int
+        Number of times each value should be repeated
+    
+    Returns:
+    --------
+    np.ndarray
+        Array with each value repeated repeat_count times
+    
+    Example:
+    --------
+    Input: validation_values=[1,2,3], repeat_count=3
+    Output: [1,1,1,2,2,2,3,3,3]
+    """
+    if not isinstance(validation_values, np.ndarray):
+        validation_values = np.array(validation_values)
+        
+    # Use numpy's repeat function to duplicate each element
+    duplicated_values = np.repeat(validation_values, repeat_count)
+    
+    return duplicated_values
 
 def saveProcessedData(data, filepath):
     """
@@ -175,3 +211,6 @@ if __name__ == "__main__":
     y = getVali(valiPath)
     print(y.shape)
     
+    y_d = getVali(valiPath, 3)
+    print(y_d.shape)
+    print(y_d[0:18])

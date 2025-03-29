@@ -359,17 +359,17 @@ if __name__ == "__main__":
         patience=5,
         min_lr=1e-6
     )  
-    epoch_num = 100 # 训练轮数
+    epoch_num = 300 # 训练轮数
     batch_size_set = 16 # 可以调高一些至8/16
     split_size_set = 0.8 # 训练集占比
     patience_set = 10 # 早停耐心值
 
     # ------------------- Loading and Preprocessing Data -------------------
     # Load and preprocess data
-    X = getData(oriFolderPath, 5, loadFromFile=True, saveToFile=False) # 直接从文件中读取数据
+    X = getData(oriFolderPath, 15, loadFromFile=True, saveToFile=False) # 直接从文件中读取数据，5 为切割为 1 分钟，15 为切割为 20 秒
 
     # Load validation data
-    y = getVali(valiPath)
+    y = getVali(valiPath, 3) # 1（默认）为保持 1 分钟，3 为切割为 20 秒
 
     # ------------------- Input Dataloader -------------------
     # Convert to PyTorch tensors
