@@ -33,7 +33,8 @@ def getData(oriFolderPath, split_count=1, loadFromFile=False, saveToFile=True, p
         result = loadProcessedData(processed_file_path)
     else:
         preProcessData = []
-        bin_files = [f for f in os.listdir(oriFolderPath) if f.endswith('.bin')]
+        bin_files = [f for f in os.listdir(oriFolderPath) if f.endswith('.bin') and not f.startswith('._')]
+        bin_files.sort(key = lambda x: int(x.replace('adc_data_','')[:-4]))  # Sort the bin files to ensure consistent order
         for file_name in bin_files:
             file_path = os.path.join(oriFolderPath, file_name)
     
@@ -203,7 +204,7 @@ if __name__ == "__main__":
     oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample"
     valiPath = oriFolderPath + "/HR.xlsx"
 
-    X = getData(oriFolderPath, 5, loadFromFile=True, saveToFile=False)
+    X = getData(oriFolderPath, 5, loadFromFile=False, saveToFile=False)
 
     # Print the shape of each part
     print(X.shape)

@@ -20,6 +20,7 @@ from data_validation import (
     check_gradients,
     check_loss_value
 )
+from data_augmentation import augment_dataset,MmWaveAugmentation
 
 # ------------------- Training Loop -------------------
 # Training loop with validation checks
@@ -404,7 +405,7 @@ if __name__ == "__main__":
     # ------------------- Setup -------------------
     # Path setup
     #oriFolderPath = r"/Sample" # 文件夹路径
-    oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample/" # 文件夹路径
+    oriFolderPath = r"/Volumes/T7_Shield/mmwave_ip/Dataset/Sample3/" # 文件夹路径
     valiPath = oriFolderPath + "/HR.xlsx"
     preProcessData = []
     checkpoint_dir = Path("checkpoints")
@@ -414,13 +415,13 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "mps") # cuda for GPU, mps for Apple Silicon
     model = ChirpRegressionModel().to(device)
     criterion = nn.MSELoss()  # 回归任务使用MSE损失
-    optimizer = optim.AdamW(model.parameters(), lr=5e-5, weight_decay=1e-4)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode='min',
-        factor=0.5,
-        patience=5,
-        min_lr=1e-6
+        factor=0.7,
+        patience=10,
+        min_lr=1e-7
     )  
     epoch_num = 300 # 训练轮数
     batch_size_set = 16 # 可以调高一些至8/16
@@ -429,7 +430,7 @@ if __name__ == "__main__":
 
     # ------------------- Loading and Preprocessing Data -------------------
     # Load and preprocess data
-    X = getData(oriFolderPath, 5, loadFromFile=True, saveToFile=False) # 直接从文件中读取数据，5 为切割为 1 分钟，15 为切割为 20 秒
+    X = getData(oriFolderPath, 5, loadFromFile = True, saveToFile = False) # 直接从文件中读取数据，5 为切割为 1 分钟，15 为切割为 20 秒
 
     # Load validation data
     y = getVali(valiPath) # 1（默认）为保持 1 分钟，3 为切割为 20 秒
@@ -468,6 +469,16 @@ if __name__ == "__main__":
         pickle.dump(normalization_params, f)
 
     print(X_tensor.shape, y_tensor.shape)
+
+    print("Performing data augmentation...")
+    X_tensor, y_tensor = augment_dataset(
+        X_tensor, 
+        y_tensor, 
+        augment_factor=3,
+        primary_aug=MmWaveAugmentation.add_gaussian_noise,
+        aug_probability=0.0,  # Set to 0 to disable random augmentations, set to 0.3 to enable random augmentations
+        always_include_primary=True
+    )  
 
     # Create DataLoader
     train_dataset, val_dataset = create_stratified_split(
